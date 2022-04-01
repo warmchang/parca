@@ -15,16 +15,15 @@ require (
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-chi/cors v1.2.0
 	github.com/go-delve/delve v1.8.2
-	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/go-kit/log v0.2.0
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/goburrow/cache v0.1.4
 	github.com/google/pprof v0.0.0-20220218203455-0368bd9e19a7
 	github.com/google/uuid v1.3.0
-	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
-	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-20201002093600-73cf2ae9d891
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201207153454-9f6bf00c00a7
-	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-20220308023801-e4a6915ea237
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/openmetrics/v2 v2.0.0-20220308023801-e4a6915ea237
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201002093600-73cf2ae9d891
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.10.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ianlancetaylor/demangle v0.0.0-20220203202831-b7f99f1dbc96
@@ -58,3 +57,9 @@ require (
 replace github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20211217191541-41f1a8125e66
 
 replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v0.24.0
+
+replace (
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 => ../../grpc-ecosystem/go-grpc-middleware/providers/kit
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/openmetrics/v2 => ../../grpc-ecosystem/go-grpc-middleware/providers/openmetrics
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 => ../../grpc-ecosystem/go-grpc-middleware
+)

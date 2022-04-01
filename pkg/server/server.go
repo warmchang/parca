@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/http"
 	"net/http/pprof"
 	"strings"
@@ -31,8 +32,8 @@ import (
 	"github.com/go-kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
+	grpc_openmetrics "github.com/grpc-ecosystem/go-grpc-middleware/providers/openmetrics/v2"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/prometheus/client_golang/prometheus"
@@ -105,23 +106,25 @@ func (s *Server) ListenAndServe(ctx context.Context, logger log.Logger, port str
 		grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
 	}
 
-	met := grpc_prometheus.NewServerMetrics()
-	met.EnableHandlingTimeHistogram(
-		grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120}),
+	met := grpc_openmetrics.NewRegisteredServerMetrics(s.reg,
+		grpc_openmetrics.WithServerHandlingTimeHistogram(
+			grpc_openmetrics.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120}),
+		),
 	)
 
 	// Start grpc server with API server registered
 	srv := grpc.NewServer(
+		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc.StreamInterceptor(
 			grpc_middleware.ChainStreamServer(
 				otelgrpc.StreamServerInterceptor(),
-				met.StreamServerInterceptor(),
+				grpc_openmetrics.StreamServerInterceptor(met),
 				grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 			)),
 		grpc.UnaryInterceptor(
 			grpc_middleware.ChainUnaryServer(
 				otelgrpc.UnaryServerInterceptor(),
-				met.UnaryServerInterceptor(),
+				grpc_openmetrics.UnaryServerInterceptor(met),
 				grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 			),
 		),
@@ -180,7 +183,6 @@ func (s *Server) ListenAndServe(ctx context.Context, logger log.Logger, port str
 	}
 
 	met.InitializeMetrics(srv)
-	s.reg.MustRegister(met)
 
 	s.reg.MustRegister(
 		collectors.NewBuildInfoCollector(),

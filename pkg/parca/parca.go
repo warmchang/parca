@@ -26,7 +26,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpc_kitlog "github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
+	grpc_openmetrics "github.com/grpc-ecosystem/go-grpc-middleware/providers/openmetrics/v2"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
@@ -320,13 +322,14 @@ func runScraper(
 		return fmt.Errorf("parca scraper mode needs to have a --store-address")
 	}
 
-	metrics := grpc_prometheus.NewClientMetrics()
-	metrics.EnableClientHandlingTimeHistogram()
-	reg.MustRegister(metrics)
+	metrics := grpc_openmetrics.NewRegisteredClientMetrics(reg,
+		grpc_openmetrics.WithClientHandlingTimeHistogram(),
+	)
 
 	opts := []grpc.DialOption{
-		grpc.WithUnaryInterceptor(
-			metrics.UnaryClientInterceptor(),
+		grpc.WithChainUnaryInterceptor(
+			grpc_openmetrics.UnaryClientInterceptor(metrics),
+			grpc_logging.UnaryClientInterceptor(grpc_kitlog.InterceptorLogger(logger)),
 		),
 	}
 	if flags.Insecure {
