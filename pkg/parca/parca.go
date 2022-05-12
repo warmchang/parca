@@ -158,6 +158,8 @@ func Run(ctx context.Context, logger log.Logger, reg *prometheus.Registry, flags
 		return err
 	}
 
+	metaStoreIndex := metastore.NewIndex(logger, mStr)
+
 	col := arcticdb.New(
 		reg,
 		flags.StorageGranuleSize,
@@ -254,6 +256,28 @@ func Run(ctx context.Context, logger log.Logger, reg *prometheus.Registry, flags
 				sym.Close()
 			})
 	}
+	gr.Add(
+		func() error {
+			return metaStoreIndex.Index(ctx)
+		}, func(err error) {
+		},
+	)
+	gr.Add(
+		func() error {
+			ticker := time.NewTicker(time.Second)
+			for {
+				select {
+				case <-ticker.C:
+					search, err := metaStoreIndex.Search(ctx, metastore.Function, "runtime.main")
+					if err != nil {
+						return err
+					}
+					fmt.Println(len(search))
+				}
+			}
+		}, func(err error) {
+		},
+	)
 	gr.Add(
 		func() error {
 			return discoveryManager.Run()
