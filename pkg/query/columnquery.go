@@ -198,37 +198,66 @@ var (
 	ErrValueColumnNotFound     = errors.New("value column not found")
 )
 
-func queryToFilterExprs(query string) ([]logicalplan.Expr, error) {
+type SearchProvider interface {
+	Search(ctx context.Context, queryType int, match string) ([][]byte, error)
+}
+
+func searchFunction(ctx context.Context, p SearchProvider, matcher *labels.Matcher) (logicalplan.Expr, error) {
+	if matcher == nil {
+		return nil, nil
+	}
+
+	ids, err := p.Search(ctx, 1, matcher.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	exprs := make([]logicalplan.Expr, 0, len(ids))
+	for _, id := range ids {
+		exprs = append(exprs, logicalplan.Col("stacktrace").Includes(logicalplan.Literal(id)))
+	}
+
+	return logicalplan.Or(exprs...), nil
+}
+
+func queryToFilterExprs(query string) (*labels.Matcher, []logicalplan.Expr, error) {
 	parsedSelector, err := parser.ParseMetricSelector(query)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "failed to parse query")
+		return nil, nil, status.Error(codes.InvalidArgument, "failed to parse query")
 	}
 
 	profSel := []*labels.Matcher{}
 	sel := []*labels.Matcher{}
 	var nameLabel *labels.Matcher
+	var functionMatcher *labels.Matcher
 	for _, matcher := range parsedSelector {
 		if matcher.Name == "__name__" {
 			nameLabel = matcher
+			continue
+		}
+
+		if matcher.Name == "function" {
+			functionMatcher = matcher
+			continue
+		}
+
+		if strings.HasPrefix(matcher.Name, "profile_label_") {
+			profSel = append(profSel, &labels.Matcher{
+				Name:  strings.TrimPrefix(matcher.Name, "profile_label_"),
+				Type:  matcher.Type,
+				Value: matcher.Value,
+			})
 		} else {
-			if strings.HasPrefix(matcher.Name, "profile_label_") {
-				profSel = append(profSel, &labels.Matcher{
-					Name:  strings.TrimPrefix(matcher.Name, "profile_label_"),
-					Type:  matcher.Type,
-					Value: matcher.Value,
-				})
-			} else {
-				sel = append(sel, matcher)
-			}
+			sel = append(sel, matcher)
 		}
 	}
 	if nameLabel == nil {
-		return nil, status.Error(codes.InvalidArgument, "query must contain a profile-type selection")
+		return nil, nil, status.Error(codes.InvalidArgument, "query must contain a profile-type selection")
 	}
 
 	parts := strings.Split(nameLabel.Value, ":")
 	if len(parts) != 5 && len(parts) != 6 {
-		return nil, status.Errorf(codes.InvalidArgument, "profile-type selection must be of the form <name>:<sample-type>:<sample-unit>:<period-type>:<period-unit>(:delta), got(%d): %q", len(parts), nameLabel.Value)
+		return nil, nil, status.Errorf(codes.InvalidArgument, "profile-type selection must be of the form <name>:<sample-type>:<sample-unit>:<period-type>:<period-unit>(:delta), got(%d): %q", len(parts), nameLabel.Value)
 	}
 	name, sampleType, sampleUnit, periodType, periodUnit, delta := parts[0], parts[1], parts[2], parts[3], parts[4], false
 	if len(parts) == 6 && parts[5] == "delta" {
@@ -237,12 +266,12 @@ func queryToFilterExprs(query string) ([]logicalplan.Expr, error) {
 
 	labelFilterExpressions, err := labelMatchersToBooleanExpressions(sel)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "failed to build query")
+		return nil, nil, status.Error(codes.InvalidArgument, "failed to build query")
 	}
 
 	profileLabelFilterExpressions, err := profileLabelMatchersToBooleanExpressions(profSel)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "failed to build query")
+		return nil, nil, status.Error(codes.InvalidArgument, "failed to build query")
 	}
 
 	exprs := append([]logicalplan.Expr{
@@ -262,7 +291,7 @@ func queryToFilterExprs(query string) ([]logicalplan.Expr, error) {
 
 	exprs = append(exprs, deltaPlan)
 
-	return exprs, nil
+	return functionMatcher, exprs, nil
 }
 
 // QueryRange issues a range query against the storage.
@@ -271,7 +300,7 @@ func (q *ColumnQueryAPI) QueryRange(ctx context.Context, req *pb.QueryRangeReque
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	selectorExprs, err := queryToFilterExprs(req.Query)
+	_, selectorExprs, err := queryToFilterExprs(req.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +632,7 @@ func (q *ColumnQueryAPI) findSingle(ctx context.Context, query string, t time.Ti
 	span.SetAttributes(attribute.Int64("time", t.Unix()))
 	defer span.End()
 
-	selectorExprs, err := queryToFilterExprs(query)
+	_, selectorExprs, err := queryToFilterExprs(query)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +685,7 @@ func (q *ColumnQueryAPI) selectMerge(ctx context.Context, m *pb.MergeProfile) (*
 	ctx, span := q.tracer.Start(ctx, "selectMerge")
 	defer span.End()
 
-	selectorExprs, err := queryToFilterExprs(m.Query)
+	_, selectorExprs, err := queryToFilterExprs(m.Query)
 	if err != nil {
 		return nil, err
 	}
