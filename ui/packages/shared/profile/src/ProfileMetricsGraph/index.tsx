@@ -79,22 +79,29 @@ export interface IQueryRangeState {
   error: RpcError | null;
 }
 
+const EMPTY_SUM_BY: string[] = [];
+
 export const useQueryRange = (
   client: QueryServiceClient,
   queryExpression: string,
   start: number,
-  end: number
+  end: number,
+  sumBy: string[] = EMPTY_SUM_BY,
+  skip = false
 ): IQueryRangeState => {
+  const [isLoading, setLoading] = useState<boolean>(!skip);
   const [state, setState] = useState<IQueryRangeState>({
     response: null,
-    isLoading: true,
+    isLoading,
     error: null,
   });
-  const [isLoading, setLoading] = useState<boolean>(true);
   const metadata = useGrpcMetadata();
 
   useEffect(() => {
     void (async () => {
+      if (skip) {
+        return;
+      }
       setLoading(true);
 
       const stepDuration = getStepDuration(start, end);
@@ -105,6 +112,7 @@ export const useQueryRange = (
           end: Timestamp.fromDate(new Date(end)),
           step: Duration.create(stepDuration),
           limit: 0,
+          sumBy,
         },
         {meta: metadata}
       );
@@ -120,7 +128,7 @@ export const useQueryRange = (
           setLoading(false);
         });
     })();
-  }, [client, queryExpression, start, end, metadata]);
+  }, [client, queryExpression, start, end, metadata, sumBy, skip]);
 
   return {...state, isLoading};
 };
@@ -193,7 +201,7 @@ const ProfileMetricsGraph = ({
     return (
       <AnimatePresence>
         <motion.div
-          className="h-full w-full"
+          className="h-full w-full relative"
           key="metrics-graph-loaded"
           initial={{display: 'none', opacity: 0}}
           animate={{display: 'block', opacity: 1}}

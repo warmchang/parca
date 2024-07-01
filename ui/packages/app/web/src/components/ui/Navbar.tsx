@@ -11,20 +11,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import {useCallback, useState} from 'react';
+
 import {Disclosure} from '@headlessui/react';
 import {Icon} from '@iconify/react';
 import cx from 'classnames';
 import GitHubButton from 'react-github-btn';
-import {Link, LinkProps, useLocation} from 'react-router-dom';
+import {usePopper} from 'react-popper';
+import {Link, LinkProps, useLocation, useNavigate} from 'react-router-dom';
 
+import {Button} from '@parca/components';
 import {Parca, ParcaSmall} from '@parca/icons';
 import {selectDarkMode, useAppSelector} from '@parca/store';
+import {convertToQueryParams, parseParams} from '@parca/utilities';
 
 import ReleaseNotesViewer from '../ReleaseNotesViewer';
 import ThemeToggle from './ThemeToggle';
 
 const links: {[path: string]: {label: string; href: string; external: boolean}} = {
-  '/': {label: 'Profiles', href: `/`, external: false},
+  '/': {label: 'Explorer', href: `/`, external: false},
+  '/compare': {label: 'Compare', href: 'compare', external: false},
   '/targets': {label: 'Targets', href: `/targets`, external: false},
   '/help': {label: 'Help', href: 'https://parca.dev/docs/overview', external: true},
 };
@@ -47,9 +53,75 @@ const GitHubStarButton = () => {
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const queryParams = new URLSearchParams(location.search);
+  const expressionA = queryParams.get('expression_a');
+  const expressionB = queryParams.get('expression_b');
+  const comparing = queryParams.get('comparing');
+
+  const queryParamsURL = parseParams(window.location.search);
+
+  /* eslint-disable @typescript-eslint/naming-convention */
+  const {
+    from_a,
+    to_a,
+    merge_from_a,
+    merge_to_a,
+    time_selection_a,
+    filter_by_function,
+    dashboard_items,
+    selection_a,
+    expression_a,
+  } = queryParamsURL;
+
+  const isComparePage = expressionA !== null && expressionB !== null;
+
+  const [compareHover, setCompareHover] = useState<boolean>(false);
+  const [comparePopperReferenceElement, setComparePopperReferenceElement] =
+    useState<HTMLDivElement | null>(null);
+  const [comparePopperElement, setComparePopperElement] = useState<HTMLDivElement | null>(null);
+  const {styles, attributes} = usePopper(comparePopperReferenceElement, comparePopperElement, {
+    placement: 'bottom',
+  });
+
+  const compareExplanation =
+    'Compare two profiles and see the relative difference between them more clearly.';
 
   const isCurrentPage = (item: {label: string; href: string; external: boolean}) =>
-    location.pathname === item.href;
+    (item.href === 'compare' && (isComparePage || comparing === 'true')) ||
+    (!isComparePage && comparing !== 'true' && location.pathname === item.href);
+
+  const navigateTo = useCallback(
+    (path: string, queryParams: any, options?: {replace?: boolean}) => {
+      navigate(
+        {
+          pathname: path,
+          search: `?${convertToQueryParams(queryParams)}`,
+        },
+        options ?? {}
+      );
+    },
+    [navigate]
+  );
+
+  const queryToBePassed =
+    expression_a === undefined
+      ? {
+          comparing: 'true',
+        }
+      : {
+          comparing: 'true',
+          dashboard_items: dashboard_items,
+          expression_a: expression_a,
+          from_a: from_a,
+          to_a: to_a,
+          time_selection_a: time_selection_a,
+          selection_a: selection_a,
+          filter_by_function: filter_by_function,
+          merge_from_a: merge_from_a,
+          merge_to_a: merge_to_a,
+        };
 
   return (
     <Disclosure as="nav" className="relative z-10 dark:bg-gray-900">
@@ -107,7 +179,60 @@ const Navbar = () => {
                           if (isCurrentPage(item)) {
                             props['aria-current'] = 'page';
                           }
-                          return item.external ? (
+                          return item.href === 'compare' ? (
+                            <div ref={setComparePopperReferenceElement}>
+                              <Button
+                                className={cx(
+                                  isCurrentPage(item)
+                                    ? 'dark:border-gray-100 text-indigo-600 dark:text-gray-100 border-indigo-500'
+                                    : 'hover:border-gray-300 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-100 border-transparent',
+                                  'rounded-none hover:no-underline border-b-2 focus:ring-0 focus:outline-none focus:ring-offset-0 h-full whitespace-nowrap font-medium'
+                                )}
+                                variant="link"
+                                onClick={() =>
+                                  navigateTo(
+                                    '/',
+                                    {
+                                      ...queryToBePassed,
+                                    },
+                                    {replace: true}
+                                  )
+                                }
+                                onMouseEnter={() => setCompareHover(true)}
+                                onMouseLeave={() => setCompareHover(false)}
+                                id="h-compare-button"
+                              >
+                                Compare
+                              </Button>
+                              {compareHover && (
+                                <div
+                                  ref={setComparePopperElement}
+                                  style={styles.popper}
+                                  {...attributes.popper}
+                                  className="z-50"
+                                >
+                                  <div className="flex">
+                                    <div className="relative mx-2">
+                                      <svg
+                                        className="left-0 h-1 w-full text-black"
+                                        x="0px"
+                                        y="0px"
+                                        viewBox="0 0 255 127.5"
+                                      >
+                                        <polygon
+                                          className="fill-current"
+                                          points="0,127.5 127.5,0 255,127.5"
+                                        />
+                                      </svg>
+                                      <div className="right-0 w-40 rounded bg-black px-3 py-2 text-xs text-white">
+                                        {compareExplanation}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : item.external === true ? (
                             <a key={item.label} {...props} href={href}>
                               {item.label}
                             </a>

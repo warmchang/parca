@@ -27,13 +27,13 @@ import {
 } from '@parca/components';
 import {CloseIcon} from '@parca/icons';
 import {Query} from '@parca/parser';
+import {type NavigateFunction} from '@parca/utilities';
 
 import {MergedProfileSelection, ProfileSelection} from '..';
 import MatchersInput from '../MatchersInput/index';
 import {useMetricsGraphDimensions} from '../MetricsGraph/useMetricsGraphDimensions';
 import ProfileMetricsGraph, {ProfileMetricsEmptyState} from '../ProfileMetricsGraph';
 import ProfileTypeSelector from '../ProfileTypeSelector/index';
-import CompareButton from './CompareButton';
 import {useAutoQuerySelector} from './useAutoQuerySelector';
 
 export interface QuerySelection {
@@ -54,7 +54,7 @@ interface ProfileSelectorProps {
   enforcedProfileName: string;
   profileSelection: ProfileSelection | null;
   comparing: boolean;
-  onCompareProfile: () => void;
+  navigateTo: NavigateFunction;
 }
 
 export interface IProfileTypesResult {
@@ -92,7 +92,7 @@ const ProfileSelector = ({
   enforcedProfileName,
   profileSelection,
   comparing,
-  onCompareProfile,
+  navigateTo,
 }: ProfileSelectorProps): JSX.Element => {
   const {
     loading: profileTypesLoading,
@@ -217,21 +217,19 @@ const ProfileSelector = ({
     profileTypesData,
     setProfileName,
     setQueryExpression,
+    querySelection,
+    navigateTo,
   });
-
-  const handleCompareClick = (): void => onCompareProfile();
 
   const searchDisabled =
     queryExpressionString === undefined ||
     queryExpressionString === '' ||
     queryExpressionString === '{}';
 
-  const compareDisabled = selectedProfileName === '' || querySelection.expression === undefined;
-
   return (
     <>
       <div className="mb-2 flex gap-2">
-        <div className="flex w-full flex-wrap content-start items-center justify-between gap-2">
+        <div className="flex w-full flex-wrap content-start items-center gap-2">
           <div className="pb-6">
             <label className="text-xs">Profile type</label>
             <ProfileTypeSelector
@@ -261,13 +259,6 @@ const ProfileSelector = ({
             range={timeRangeSelection}
           />
           <ButtonGroup>
-            {!searchDisabled && (
-              <>
-                {!comparing && (
-                  <CompareButton disabled={compareDisabled} onClick={handleCompareClick} />
-                )}
-              </>
-            )}
             <Button
               disabled={searchDisabled}
               onClick={(e: React.MouseEvent<HTMLElement>) => {
